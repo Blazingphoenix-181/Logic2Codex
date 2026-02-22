@@ -124,6 +124,66 @@ function CodeDisplay({
   );
 }
 
+function GeneratingAnimation({ language }: { language: string }) {
+  const [visibleLines, setVisibleLines] = useState(1);
+
+  const codeSnippets: { [key: string]: string[] } = {
+    Python: [
+      'def solve():',
+      '    # Analyzing problem...',
+      '    # Formulating logic...',
+      '    return "Coming right up!"',
+    ],
+    Java: [
+      'class Solution {',
+      '    public String solve() {',
+      '        // Analyzing problem...',
+      '        // Formulating logic...',
+      '        return "Coming right up!";',
+      '    }',
+      '}',
+    ],
+    'C++': [
+      '#include <string>',
+      'std::string solve() {',
+      '    // Analyzing problem...',
+      '    // Formulating logic...',
+      '    return "Coming right up!";',
+      '}',
+    ],
+    C: [
+      '#include <stdio.h>',
+      'const char* solve() {',
+      '    // Analyzing problem...',
+      '    // Formulating logic...',
+      '    return "Coming right up!";',
+      '}',
+    ],
+  };
+
+  const codeToAnimate = codeSnippets[language] || codeSnippets['Python'];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisibleLines(prev => (prev >= codeToAnimate.length ? 1 : prev + 1));
+    }, 700);
+    return () => clearInterval(interval);
+  }, [codeToAnimate.length]);
+
+  const displayedCode = codeToAnimate.slice(0, visibleLines).join('\n');
+
+  return (
+    <div className="bg-background p-4 rounded-md relative group h-full">
+      <pre>
+        <code className="font-code text-sm text-foreground opacity-50">
+          {displayedCode}
+          <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
+        </code>
+      </pre>
+    </div>
+  );
+}
+
 export function CodeGenerator() {
   const [state, formAction] = useActionState(generateCode, initialState);
   const { toast } = useToast();
@@ -268,12 +328,7 @@ export function CodeGenerator() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-              {pending && (
-                <div className="flex flex-col items-center justify-center text-center text-muted-foreground pt-16">
-                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                  <p className="mt-4">Generating your code...</p>
-                </div>
-              )}
+              {pending && <GeneratingAnimation language={language} />}
 
               {!pending && state.result && (
                 <CodeDisplay
