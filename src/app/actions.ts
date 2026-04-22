@@ -7,6 +7,7 @@ import type { GenerateCodeFromQuestionOutput } from "@/ai/flows/generate-code-fr
 export interface State {
   result?: GenerateCodeFromQuestionOutput;
   error?: string;
+  errorType?: "api" | "validation" | "unknown";
   fieldErrors?: {
     question?: string[];
     language?: string[];
@@ -24,6 +25,70 @@ const formSchema = z.object({
   logic: z.string().optional(),
 });
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+function isTransientError(e: unknown): boolean {
+  if (e instanceof Error) {
+    const msg = e.message.toLowerCase();
+    return (
+      msg.includes("503") ||
+      msg.includes("429") ||
+      msg.includes("service unavailable") ||
+      msg.includes("too many requests") ||
+      msg.includes("rate limit") ||
+      msg.includes("overloaded")
+    );
+  }
+  return false;
+}
+
+function classifyError(e: unknown): { message: string; errorType: "api" | "unknown" } {
+  if (e instanceof Error) {
+    const msg = e.message.toLowerCase();
+
+    if (
+      msg.includes("503") ||
+      msg.includes("service unavailable") ||
+      msg.includes("overloaded")
+    ) {
+      return {
+        message:
+          "The AI service is temporarily unavailable due to high demand. Please try again in a moment.",
+        errorType: "api",
+      };
+    }
+
+    if (
+      msg.includes("429") ||
+      msg.includes("too many requests") ||
+      msg.includes("rate limit")
+    ) {
+      return {
+        message:
+          "Rate limit reached. Please wait a few seconds before trying again.",
+        errorType: "api",
+      };
+    }
+
+    if (msg.includes("api key") || msg.includes("unauthorized") || msg.includes("401")) {
+      return {
+        message: "API authentication failed. Please contact support.",
+        errorType: "api",
+      };
+    }
+  }
+
+  return {
+    message: "An unexpected error occurred. Please try again.",
+    errorType: "unknown",
+  };
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function generateCode(
   prevState: State,
   formData: FormData
@@ -34,7 +99,8 @@ export async function generateCode(
 
   if (!validatedFields.success) {
     return {
-      error: "Invalid form data.",
+      error: "Please fix the form errors below.",
+      errorType: "validation",
       fieldErrors: validatedFields.error.flatten().fieldErrors,
     };
   }
@@ -44,14 +110,35 @@ export async function generateCode(
     ? `${question}\n\nHere is my proposed logic or approach:\n${logic}`
     : question;
 
-  try {
-    const result = await generateCodeFromQuestion({
-      question: fullQuestion,
-      language: language,
-    });
-    return { result };
-  } catch (e) {
-    console.error(e);
-    return { error: "An unexpected error occurred. Please try again." };
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await generateCodeFromQuestion({
+        question: fullQuestion,
+        language: language,
+      });
+      return { result };
+    } catch (e) {
+      lastError = e;
+      const isTransient = isTransientError(e);
+
+      console.error(
+        `[generateCode] Attempt ${attempt}/${MAX_RETRIES} failed:`,
+        e instanceof Error ? e.message : e
+      );
+
+      if (isTransient && attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAY_MS * attempt;
+        console.log(`[generateCode] Transient error — retrying in ${delay}ms…`);
+        await sleep(delay);
+        continue;
+      }
+
+      break;
+    }
   }
+
+  const { message, errorType } = classifyError(lastError);
+  return { error: message, errorType };
 }

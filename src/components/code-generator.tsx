@@ -33,12 +33,14 @@ import {
   BrainCircuit,
   Sparkles,
   Download,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 
 const initialState: State = {};
 
-function SubmitButton() {
+function SubmitButton({ label = "Generate Code" }: { label?: string }) {
   const { pending } = useFormStatus();
   return (
     <Button
@@ -55,7 +57,7 @@ function SubmitButton() {
       ) : (
         <>
           <Play className="mr-2" />
-          Generate Code
+          {label}
         </>
       )}
     </Button>
@@ -193,23 +195,16 @@ export function CodeGenerator() {
   const { pending } = useFormStatus();
 
   useEffect(() => {
-    if (state.error) {
-      toast({
-        title: "Error",
-        description: state.error,
-        variant: "destructive",
-      });
-    }
     if (state.fieldErrors?.language) {
       toast({
-        title: "Error",
+        title: "Validation Error",
         description: state.fieldErrors.language.join(", "),
         variant: "destructive",
       });
     }
     if (state.fieldErrors?.question) {
       toast({
-        title: "Error",
+        title: "Validation Error",
         description: state.fieldErrors.question.join(", "),
         variant: "destructive",
       });
@@ -314,7 +309,13 @@ export function CodeGenerator() {
               </Card>
             )}
 
-            <SubmitButton />
+            <SubmitButton
+              label={
+                state.error && state.errorType !== "validation"
+                  ? "Retry Generation"
+                  : "Generate Code"
+              }
+            />
           </div>
 
           <Card className="min-h-[60vh]">
@@ -337,7 +338,39 @@ export function CodeGenerator() {
                 />
               )}
 
-              {!pending && !state.result && (
+              {!pending && state.error && (
+                <div className="flex flex-col items-center justify-center text-center pt-16 gap-4 px-4">
+                  <div className="w-16 h-16 flex items-center justify-center rounded-full bg-destructive/10 mb-2 border-2 border-destructive/30">
+                    <AlertTriangle size={32} className="text-destructive" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-semibold text-foreground">
+                      {state.errorType === "api"
+                        ? "Service Error"
+                        : state.errorType === "validation"
+                        ? "Validation Error"
+                        : "Something went wrong"}
+                    </p>
+                    <p className="text-sm text-muted-foreground max-w-xs">
+                      {state.error}
+                    </p>
+                  </div>
+                  {(state.errorType === "api" || state.errorType === "unknown") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => formRef.current?.requestSubmit()}
+                      className="mt-2 gap-2"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Retry
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {!pending && !state.result && !state.error && (
                 <div className="flex flex-col items-center justify-center text-center text-muted-foreground pt-16">
                   <div className="w-16 h-16 flex items-center justify-center rounded-full bg-card mb-4 border-2">
                     <Sparkles
