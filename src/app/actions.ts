@@ -71,9 +71,14 @@ function classifyError(e: unknown): { message: string; errorType: "api" | "unkno
       };
     }
 
-    if (msg.includes("api key") || msg.includes("unauthorized") || msg.includes("401")) {
+    if (
+      msg.includes("api key") ||
+      msg.includes("unauthorized") ||
+      msg.includes("401")
+    ) {
       return {
-        message: "API authentication failed. Please contact support.",
+        message:
+          "API authentication failed. Configure GEMINI_API_KEY (or GOOGLE_GENAI_API_KEY) and try again.",
         errorType: "api",
       };
     }
